@@ -382,8 +382,13 @@ function sendMessage2() {
 
 function isValidEmail(email) {
     const emailPattern = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    if (!email) {
+        console.error("Email is empty or undefined");
+        return false;
+    }
+    console.log("Testing email:", email);
     return emailPattern.test(email);
-}             
+}           
 
 function verifyAndRedirect() {
                 if (isHuman()) {
